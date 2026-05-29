@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<title>Люшер түс тесті</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* =================================================================
+   ЛЮШЕР ТҮС ТЕСТІ — v0.1 (ядро + интерпретация)
+   Архитектура: бір файл, бөлімдерге бөлінген (кейін модульдеуге оңай)
+   1) CSS айнымалылары мен стиль
+   2) Деректер: COLORS + INTERPRET (мәтіндер)
+   3) Қозғалтқыш: функционалдық топтар + мазасыздық
+   4) UI логикасы: таңдау, экрандар, нәтиже
+   ================================================================= */
+
+:root{
+  --bg:#F2ECE1;
+  --bg-2:#EDE6D8;
+  --surface:#FBF8F1;
+  --ink:#211C15;
+  --ink-soft:#4A4338;
+  --muted:#857B6B;
+  --line:#DDD4C2;
+  --line-soft:#E7DFCF;
+  --accent:#8A4B25;          /* терракот — батырмалар, маркерлер */
+  --accent-soft:#B5743F;
+  --shadow:0 1px 2px rgba(33,28,21,.06), 0 8px 28px rgba(33,28,21,.08);
+  --shadow-lg:0 2px 6px rgba(33,28,21,.10), 0 22px 60px rgba(33,28,21,.16);
+  --serif:'Spectral', Georgia, 'Times New Roman', serif;
+  --sans:'Manrope', system-ui, -apple-system, sans-serif;
+  --r:16px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+body{
+  font-family:var(--sans);
+  color:var(--ink);
+  background:var(--bg);
+  line-height:1.6;
+  min-height:100vh;
+  width:100%;
+  -webkit-font-smoothing:antialiased;
+  position:relative;
+  overflow-x:hidden;
+}
+/* қағаз текстурасы — нәзік дән (мазмұннан АРТТА, тапты бөгемейді) */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.045'/%3E%3C/svg%3E");
+}
+.wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:clamp(28px,6vw,64px) clamp(20px,5vw,40px) 96px;}
+
+/* ---------- экран ауысуы ---------- */
+.screen{display:none;animation:fade .55s ease both;}
+.screen.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+
+/* ---------- типографика ---------- */
+.kicker{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:18px;}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(38px,9vw,62px);line-height:1.02;letter-spacing:-.01em;margin-bottom:14px;}
+h1 em{font-style:italic;color:var(--accent);}
+.lead{font-family:var(--serif);font-size:clamp(18px,4.4vw,22px);color:var(--ink-soft);line-height:1.5;max-width:54ch;margin-bottom:30px;}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(24px,5.5vw,32px);letter-spacing:-.01em;margin-bottom:18px;}
+p{margin-bottom:14px;color:var(--ink-soft);}
+.small{font-size:14px;color:var(--muted);}
+
+/* ---------- кіріспе ---------- */
+.dots{display:flex;gap:9px;margin:34px 0;flex-wrap:wrap;}
+.dots span{width:30px;height:30px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(33,28,21,.12);animation:popdot .5s ease both;}
+@keyframes popdot{from{transform:scale(0);opacity:0;}to{transform:scale(1);opacity:1;}}
+
+.steps{list-style:none;counter-reset:s;margin:26px 0 6px;}
+.steps li{counter-increment:s;position:relative;padding-left:46px;margin-bottom:16px;color:var(--ink-soft);}
+.steps li::before{content:counter(s);position:absolute;left:0;top:-1px;width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--bg);font-family:var(--serif);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+
+.note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent-soft);border-radius:12px;padding:16px 18px;margin:28px 0;font-size:14.5px;color:var(--ink-soft);}
+.note b{color:var(--ink);font-weight:600;}
+
+/* ---------- батырма ---------- */
+.btn{font-family:var(--sans);font-weight:600;font-size:16px;color:var(--bg);background:var(--ink);border:none;border-radius:999px;padding:15px 34px;cursor:pointer;transition:transform .15s ease, box-shadow .25s ease, background .2s ease;box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;gap:10px;position:relative;z-index:1;touch-action:manipulation;-webkit-tap-highlight-color:rgba(138,75,37,.2);user-select:none;-webkit-user-select:none;min-height:48px;}
+.btn:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);background:#2E271D;}
+.btn:active{transform:translateY(0) scale(.98);}
+.btn .arw{transition:transform .2s ease;}
+.btn:hover .arw{transform:translateX(4px);}
+.btn-ghost{background:transparent;color:var(--ink-soft);box-shadow:none;border:1px solid var(--line);}
+.btn-ghost:hover{background:var(--bg-2);color:var(--ink);box-shadow:none;}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:30px;}
+/* барлық интерактив элементтерде тап кідірісін болдырмау */
+.card,.pw-card,.hist-item,details.ref summary{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.06);}
+
+/* ---------- тест экраны ---------- */
+.pass-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.pass-tag{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);}
+.counter{font-family:var(--serif);font-size:15px;color:var(--muted);}
+.instr{font-family:var(--serif);font-size:clamp(20px,5vw,26px);color:var(--ink);margin-bottom:6px;line-height:1.3;}
+.subinstr{font-size:14.5px;color:var(--muted);margin-bottom:26px;}
+
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(10px,2.4vw,16px);margin-bottom:30px;}
+@media(max-width:520px){.cards{grid-template-columns:repeat(2,1fr);gap:12px;}}
+.card{aspect-ratio:3/4;border-radius:14px;cursor:pointer;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07), var(--shadow);transition:transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .25s ease, background .3s ease, border-color .3s ease;animation:cardIn .5s ease both;border:1.5px solid transparent;}
+.card:hover{transform:translateY(-6px) scale(1.02);box-shadow:inset 0 0 0 1px rgba(0,0,0,.07), var(--shadow-lg);}
+.card:active{transform:translateY(-2px) scale(.99);}
+.card.pulse{animation:cardPulse .22s ease;}
+.card.emptied{background:var(--bg-2)!important;box-shadow:none;border:1.5px dashed var(--line);cursor:default;pointer-events:none;}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.94);}to{opacity:1;transform:none;}}
+@keyframes cardPulse{50%{transform:scale(.93);}}
+
+/* таңдалған реті */
+.picked-label{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.picked{display:flex;gap:8px;flex-wrap:wrap;min-height:44px;align-items:center;margin-bottom:14px;}
+.chip{width:38px;height:38px;border-radius:9px;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(33,28,21,.12);animation:chipIn .35s ease both;display:flex;align-items:flex-end;justify-content:center;}
+.chip span{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-family:var(--serif);font-size:11px;font-weight:600;color:var(--muted);}
+@keyframes chipIn{from{transform:scale(0) translateY(8px);opacity:0;}to{transform:none;opacity:1;}}
+.picked-empty{font-size:14px;color:var(--muted);font-style:italic;}
+
+/* ---------- аралық экран ---------- */
+.interstitial{text-align:left;}
+.big-check{width:58px;height:58px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:26px;animation:popdot .5s ease both;}
+
+/* ---------- нәтиже ---------- */
+.result-head{margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--line);}
+.choice-strip{margin:18px 0;}
+.choice-strip .picked-label{margin-bottom:8px;}
+.strip{display:flex;gap:6px;border-radius:10px;overflow:hidden;box-shadow:var(--shadow);}
+.strip div{flex:1;height:46px;}
+
+.group{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px 22px 20px;margin-bottom:16px;box-shadow:var(--shadow);}
+.group-top{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+.swatches{display:flex;gap:6px;flex-shrink:0;}
+.sw{width:34px;height:46px;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08), 0 2px 5px rgba(33,28,21,.12);}
+.group-titles h3{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--ink);line-height:1.2;}
+.group-titles .q{font-size:13.5px;color:var(--accent);font-style:italic;font-family:var(--serif);}
+.group .line{font-size:15px;color:var(--ink-soft);margin-bottom:8px;display:flex;gap:10px;}
+.group .line:last-child{margin-bottom:0;}
+.group .line b{color:var(--ink);font-weight:600;flex-shrink:0;min-width:54px;}
+
+/* мазасыздық */
+.anx{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px 22px;margin:24px 0 16px;box-shadow:var(--shadow);}
+.anx-score{display:flex;align-items:baseline;gap:10px;margin-bottom:16px;}
+.anx-score .num{font-family:var(--serif);font-size:46px;font-weight:600;line-height:1;}
+.anx-score .den{font-family:var(--serif);font-size:20px;color:var(--muted);}
+.anx-score .band{margin-left:auto;font-size:13px;font-weight:600;letter-spacing:.04em;padding:5px 12px;border-radius:999px;}
+.scale{display:flex;gap:3px;margin-bottom:8px;}
+.scale i{flex:1;height:14px;border-radius:3px;background:var(--line);transition:background .4s ease;}
+.scale-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);}
+.anx-text{font-size:14.5px;color:var(--ink-soft);margin-top:14px;}
+
+/* проблема */
+.problem{background:linear-gradient(180deg,var(--bg-2),var(--surface));border:1px solid var(--line);border-radius:var(--r);padding:22px;margin-bottom:24px;box-shadow:var(--shadow);}
+.problem h3{font-family:var(--serif);font-size:19px;margin-bottom:10px;}
+
+/* анықтама */
+details.ref{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin-bottom:20px;overflow:hidden;}
+details.ref summary{cursor:pointer;padding:18px 22px;font-family:var(--serif);font-size:18px;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;}
+details.ref summary::-webkit-details-marker{display:none;}
+details.ref summary::after{content:"+";font-size:22px;color:var(--muted);transition:transform .2s ease;}
+details.ref[open] summary::after{transform:rotate(45deg);}
+.ref-grid{padding:0 22px 18px;}
+.ref-item{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line-soft);align-items:flex-start;}
+.ref-item .rsw{width:26px;height:26px;border-radius:7px;flex-shrink:0;margin-top:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+.ref-item .rname{font-weight:600;color:var(--ink);}
+.ref-item .rtext{font-size:14px;color:var(--muted);}
+
+.disclaimer-final{font-size:13px;color:var(--muted);font-style:italic;border-top:1px solid var(--line);padding-top:20px;margin-top:26px;line-height:1.55;}
+
+.barnum{background:#FBF6EC;border:1px dashed var(--accent-soft);border-radius:12px;padding:14px 16px;font-size:13.5px;color:var(--ink-soft);margin:6px 0 26px;}
+
+/* мінез-құлық типі */
+.typecard{background:linear-gradient(165deg,var(--surface),var(--bg-2));border:1px solid var(--line);border-radius:20px;padding:28px 24px;margin-bottom:28px;box-shadow:var(--shadow-lg);position:relative;overflow:hidden;}
+.typecard::after{content:"";position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(138,75,37,.06),transparent 70%);pointer-events:none;}
+.typecard .tlabel{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;}
+.typecard .tname{font-family:var(--serif);font-size:clamp(28px,7vw,40px);font-weight:600;line-height:1.05;letter-spacing:-.01em;}
+.typecard .tsw{display:flex;gap:7px;margin:18px 0;}
+.typecard .tsw div{width:40px;height:54px;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08),0 3px 8px rgba(33,28,21,.14);}
+.typecard .tdesc{font-size:15.5px;color:var(--ink-soft);margin-bottom:18px;}
+.tmeta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+@media(max-width:520px){.tmeta{grid-template-columns:1fr;}}
+.tmeta>div{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:13px 15px;}
+.tmeta .k{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.tmeta .k.s{color:#157A68;} .tmeta .k.r{color:#B5743F;}
+.tmeta .v{font-size:14px;color:var(--ink-soft);}
+.tnote{font-size:14px;color:var(--muted);border-top:1px solid var(--line-soft);padding-top:14px;line-height:1.55;}
+.tnote b{color:var(--ink-soft);font-weight:600;}
+
+/* ахроматты карталар (.card стилін қолданады) */
+.greys{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(8px,2vw,14px);margin-bottom:26px;}
+.greys .card{aspect-ratio:2/3;}
+
+/* попарлық салыстыру */
+.pw-progress{height:6px;border-radius:999px;background:var(--line-soft);overflow:hidden;margin:4px 0 24px;}
+.pw-progress i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .3s ease;width:0;}
+.pw-prompt{font-family:var(--serif);font-size:clamp(22px,5.5vw,30px);text-align:center;margin-bottom:6px;}
+.pw-sub{text-align:center;font-size:14px;color:var(--muted);margin-bottom:28px;}
+.pw-pair{display:grid;grid-template-columns:1fr 1fr;gap:clamp(14px,4vw,28px);max-width:500px;margin:0 auto 22px;}
+.pw-card{aspect-ratio:3/4;border-radius:18px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07), var(--shadow-lg);border:1.5px solid transparent;transition:transform .16s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease;animation:cardIn .4s ease both;}
+.pw-card:hover{transform:translateY(-8px) scale(1.03);}
+.pw-card:active{transform:scale(.97);}
+.pw-card.flash{animation:pwFlash .25s ease;}
+@keyframes pwFlash{50%{transform:scale(1.07);}}
+.pw-or{text-align:center;font-family:var(--serif);font-style:italic;color:var(--muted);font-size:14px;}
+
+/* ахроматты көңіл-күй блогы */
+.moodcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px 22px;margin-bottom:24px;box-shadow:var(--shadow);}
+.moodcard .mlabel{font-size:12px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+.moodcard h3{font-family:var(--serif);font-size:23px;margin-bottom:8px;}
+.moodcard .mtext{font-size:15px;color:var(--ink-soft);margin-bottom:16px;}
+.mstrip{display:flex;gap:6px;}
+.mstrip div{flex:1;height:34px;border-radius:7px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07);}
+
+/* ++/−− белгілері */
+.tbadges{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px;}
+.tbadge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);}
+.tbadge .d{width:15px;height:15px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);}
+.tbadge.pp{color:#157A68;} .tbadge.mm{color:#B5743F;}
+
+/* жұп сипаттамасы (функц. топтарда) */
+.group .pdesc{font-size:15px;color:var(--ink-soft);margin-bottom:10px;}
+.group .pmod{font-size:13.5px;color:var(--muted);border-top:1px solid var(--line-soft);padding-top:10px;font-style:italic;margin:0;}
+
+/* проблема: қосымша шиеленістер тізімі */
+.pl-label{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 10px;}
+.plist{display:flex;flex-direction:column;gap:9px;}
+.pl-item{display:flex;align-items:center;gap:11px;font-size:14px;color:var(--ink-soft);}
+.pl-item .sw{width:22px;height:30px;}
+
+/* қосымша индекс карталары */
+.idx{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:var(--shadow);}
+.idx-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+.idx-title{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);}
+.idx-sub{font-size:12px;color:var(--muted);font-style:italic;font-weight:400;}
+.idx-val{font-size:14px;font-weight:700;white-space:nowrap;}
+.idx-text{font-size:13.5px;color:var(--ink-soft);}
+
+/* 4-типтік орналасу */
+.tmeta3{display:flex;gap:20px;flex-wrap:wrap;margin:8px 0 2px;}
+.tmeta3>div{display:flex;flex-direction:column;gap:2px;}
+.k3{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.v3{font-size:14.5px;color:var(--ink);font-weight:600;font-family:var(--serif);}
+.tgoal{font-size:15px;color:var(--ink-soft);margin:16px 0 14px;}
+.tgoal b{color:var(--ink);font-weight:600;}
+.roles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;}
+@media(max-width:520px){.roles{grid-template-columns:1fr;}}
+.role{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:14px 15px;}
+.role.idol{border-left:3px solid #157A68;}
+.role.def{border-left:3px solid #B5743F;}
+.role-h{font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px;display:flex;flex-direction:column;}
+.role-h span{font-size:11px;font-weight:400;letter-spacing:.02em;color:var(--muted);font-family:var(--sans);}
+.role p{font-size:13.5px;color:var(--ink-soft);margin:0;}
+
+/* сақтау ескертпесі */
+.save-note{font-size:13px;color:var(--muted);margin-top:14px;}
+.save-note.ok{color:#157A68;}
+
+/* тарих */
+#trendBox svg{width:100%;height:auto;display:block;}
+.trend-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);}
+.trend-title{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;}
+.hist-item{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s ease, box-shadow .2s ease;}
+.hist-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+.hist-main{flex:1;min-width:0;}
+.hist-date{font-size:12px;color:var(--muted);}
+.hist-type{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);}
+.strip.mini{flex:0 0 auto;width:120px;gap:3px;box-shadow:none;}
+.strip.mini div{height:24px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.07);}
+.hist-anx{font-family:var(--serif);font-size:26px;font-weight:600;line-height:1;flex:0 0 auto;}
+.hist-anx span{font-size:13px;color:var(--muted);}
+
+/* ===================== БАСПА (PDF) ===================== */
+@media print{
+  body::before{display:none;}
+  body{background:#fff;}
+  .wrap{max-width:100%;padding:0;}
+  .btn-row, .save-note, #historyBtn, details.ref summary::after{display:none !important;}
+  .barnum{border-style:solid;}
+  .screen{display:none !important;}
+  #results.active, #results{display:block !important;}
+  details.ref[open] .ref-grid, details.ref .ref-grid{display:block !important;}
+  details.ref{break-inside:avoid;}
+  .group, .idx, .typecard, .moodcard, .anx, .problem, .role, .trend-wrap, .hist-item{break-inside:avoid;}
+  *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
+  .result-head{border-bottom:1px solid #ccc;}
+}
+.credit{position:relative;z-index:1;text-align:center;font-size:12.5px;color:var(--muted);padding:30px 20px 6px;border-top:1px solid var(--line-soft);margin-top:24px;}
+.credit b{color:var(--ink-soft);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ========================= КІРІСПЕ ========================= -->
+  <section id="intro" class="screen active">
+    <div class="kicker">Психодиагностика · Проективті әдіс</div>
+    <h1>Люшер <em>түс</em> тесті</h1>
+    <p class="lead">Қазіргі эмоционалды күйіңіздің психологиялық бейнесі — түстерді таңдау арқылы.</p>
+
+    <div class="dots" id="introDots"></div>
+
+    <p>Бұл тест сіздің <b>мінезіңізді</b> емес, дәл қазіргі сәттегі <b>психофизиологиялық күйіңізді</b> өлшейді — көңіл-күйіңіз бен жүктемемен қалай күресіп жатқаныңызды. Бұл диагноз емес, бір сәттің суреті.</p>
+
+    <h2 style="margin-top:36px;">Қалай өту керек</h2>
+    <ul class="steps">
+      <li>Тест <b>үш қысқа бөлімнен</b> тұрады, шамамен 3–4 минут.</li>
+      <li>Әр бөлімде ең <b>жағымды</b> түсті/реңкті таңдайсыз — киіміңізге немесе бөлмеңізге емес, дәл қазір өзіне қандай түс ұнайтынына қарап.</li>
+      <li><b>1.</b> Бес сұр реңк &nbsp;·&nbsp; <b>2.</b> Сегіз түс (екі рет) &nbsp;·&nbsp; <b>3.</b> Жұптап салыстыру.</li>
+    </ul>
+
+    <div class="note">
+      <b>Ескерту.</b> Люшер тесті — проективті әдістеме. Ол тек өту сәтіндегі күйді көрсетеді және клиникалық диагноз қою құралы емес.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="startFlow()">Бастау <span class="arw">→</span></button>
+      <button class="btn-ghost btn" id="introHistoryBtn" onclick="showHistory()" style="display:none;">Өткен нәтижелер</button>
+    </div>
+  </section>
+
+  <!-- ===================== АХРОМАТТЫ (СҰР) ===================== -->
+  <section id="achromatic" class="screen">
+    <div class="pass-bar">
+      <span class="pass-tag">1-бөлім · Сұр реңктер</span>
+      <span class="counter" id="greyCounter">Таңдалды: 0 / 5</span>
+    </div>
+    <div class="instr">Ең жағымды сұр реңктен бастаңыз</div>
+    <div class="subinstr">Реңктерді жағымдылығы бойынша ретке келтіріңіз.</div>
+
+    <div class="greys" id="greyCards"></div>
+
+    <div class="picked-label">Таңдау реті</div>
+    <div class="picked" id="greyPicked"><span class="picked-empty">әзірге бос…</span></div>
+
+    <div class="btn-row" style="margin-top:6px;">
+      <button class="btn-ghost btn" id="greyUndoBtn" onclick="undoGrey()" style="display:none;">↩ Соңғысын болдырмау</button>
+    </div>
+  </section>
+
+  <!-- ========================= ТЕСТ ========================= -->
+  <section id="test" class="screen">
+    <div class="pass-bar">
+      <span class="pass-tag" id="passTag">1-таңдау</span>
+      <span class="counter" id="counter">Таңдалды: 0 / 8</span>
+    </div>
+    <div class="instr" id="instr">Ең жағымды түстен бастаңыз</div>
+    <div class="subinstr" id="subinstr">Дәл қазір көзіңізге қандай түс жағымды көрінеді?</div>
+
+    <div class="cards" id="cards"></div>
+
+    <div class="picked-label">Таңдау реті</div>
+    <div class="picked" id="picked"><span class="picked-empty">әзірге бос…</span></div>
+
+    <div class="btn-row" style="margin-top:6px;">
+      <button class="btn-ghost btn" id="undoBtn" onclick="undoPick()" style="display:none;">↩ Соңғысын болдырмау</button>
+    </div>
+  </section>
+
+  <!-- ========================= АРАЛЫҚ ========================= -->
+  <section id="between" class="screen">
+    <div class="interstitial">
+      <div class="big-check">✓</div>
+      <div class="kicker">1-таңдау дайын</div>
+      <h2>Енді — қайтадан</h2>
+      <p>Біраз кідіріп, түстерге жаңа көзбен қараңыз. Бірінші ретті <b>ұмытып</b>, қайтадан ең жағымды түстен бастаңыз.</p>
+      <p class="small">Екінші таңдау әдетте дәлірек болады, себебі ол алғашқы әсерден гөрі тұрақты қалауды көрсетеді.</p>
+      <div class="btn-row">
+        <button class="btn" onclick="startSecondPass()">Екінші таңдауға өту <span class="arw">→</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ЖҰПТАП САЛЫСТЫРУ ===================== -->
+  <section id="pairwise" class="screen">
+    <div class="pass-bar">
+      <span class="pass-tag">3-бөлім · Жұптап салыстыру</span>
+      <span class="counter" id="pwCounter">1 / 28</span>
+    </div>
+    <div class="pw-progress"><i id="pwBar"></i></div>
+    <div class="pw-prompt">Қайсысы жағымдырақ?</div>
+    <div class="pw-sub">Ойланбай, бірінші сезіміңізбен таңдаңыз.</div>
+    <div class="pw-pair" id="pwPair"></div>
+    <div class="pw-or">— қайсысы көзге жылы көрінеді —</div>
+  </section>
+
+  <!-- ========================= НӘТИЖЕ ========================= -->
+  <section id="results" class="screen">
+    <div class="result-head">
+      <div class="kicker">Нәтиже</div>
+      <h1 style="font-size:clamp(32px,8vw,48px);">Сіздің <em>бейнеңіз</em></h1>
+
+      <div class="choice-strip">
+        <div class="picked-label">Сұр реңктер реті</div>
+        <div class="strip" id="stripGrey"></div>
+      </div>
+      <div class="choice-strip">
+        <div class="picked-label">1-таңдау</div>
+        <div class="strip" id="strip1"></div>
+      </div>
+      <div class="choice-strip">
+        <div class="picked-label">2-таңдау <span style="color:var(--accent);">· функц. талдау осыған негізделген</span></div>
+        <div class="strip" id="strip2"></div>
+      </div>
+    </div>
+
+    <div class="barnum">
+      💡 Есте сақтаңыз: бұл мәтіндер жалпы тұжырымдар. Олардың қаншалықты сізге сәйкес келетінін <b>сын көзбен</b> бағалаңыз — «дәл мен туралы» деген әсер кейде тұжырымның әмбебаптығынан туады.
+    </div>
+
+    <div class="moodcard" id="moodBox"></div>
+
+    <div class="typecard" id="typeBox"></div>
+
+    <h2>Функционалдық топтар</h2>
+    <p class="small" style="margin-bottom:20px;">Түстің қай орында тұрғаны психиканың әртүрлі қабатын ашады.</p>
+    <div id="groups"></div>
+
+    <div class="problem" id="problemBox"></div>
+
+    <h2>Қосымша көрсеткіштер</h2>
+    <p class="small" style="margin-bottom:18px;">Сегіз түс ретінен есептелген аутентикалық индекстер.</p>
+    <div id="idxBox"></div>
+
+    <h2>Мазасыздық деңгейі</h2>
+    <div class="anx" id="anxBox"></div>
+
+    <details class="ref">
+      <summary>Түстердің мағынасы</summary>
+      <div class="ref-grid" id="refGrid"></div>
+    </details>
+
+    <div class="btn-row">
+      <button class="btn" onclick="window.print()">⤓ PDF-ке сақтау</button>
+      <button class="btn-ghost btn" onclick="showHistory()">Тарихты көру</button>
+      <button class="btn-ghost btn" onclick="restart()">↻ Қайта өту</button>
+    </div>
+    <div class="save-note" id="saveNote"></div>
+
+    <p class="disclaimer-final">
+      Әдіснамалық ескерту. Люшер тесті — проективті әдістеме, ол өту сәтіндегі күйді көрсетеді, тұрақты мінез белгілерін емес. Бұл клиникалық диагноз емес. Егер шаршау, мазасыздық немесе көңілсіздік ұзаққа созылса — мұны маманмен талқылаған пайдалы.
+    </p>
+  </section>
+
+  <!-- ========================= ТАРИХ ========================= -->
+  <section id="history" class="screen">
+    <div class="kicker">Тарих</div>
+    <h1 style="font-size:clamp(32px,8vw,48px);">Динамика</h1>
+    <p class="small" style="margin-bottom:24px;">Люшер тесті — қазіргі күйдің суреті. Бірнеше рет өту мазасыздық пен басым түстердің уақыт бойынша өзгерісін көрсетеді.</p>
+
+    <div id="trendBox" style="margin-bottom:28px;"></div>
+    <div id="histList"></div>
+
+    <div class="btn-row">
+      <button class="btn-ghost btn" onclick="historyBack()">← Артқа</button>
+      <button class="btn-ghost btn" onclick="confirmClear()">Тарихты тазалау</button>
+    </div>
+  </section>
+
+  <footer class="credit">
+  Created by: <b>Inkar Togtaubai</b> · 2026 · Люшер әдісі негізінде
+  </footer>
+
+</div>
+
+<script>
+/* =================================================================
+   2) ДЕРЕКТЕР
+   ================================================================= */
+
+// Каноникалық Люшер реңктеріне жуықтатылған (кейін нақты эталонмен реттеуге болады)
+const COLORS = {
+  1:{name:'Көк',     hex:'#234A8E', dark:false},
+  2:{name:'Жасыл',   hex:'#157A68', dark:false},
+  3:{name:'Қызыл',   hex:'#CE3A2C', dark:false},
+  4:{name:'Сары',    hex:'#F4CE1F', dark:true },
+  5:{name:'Күлгін',  hex:'#823D86', dark:false},
+  6:{name:'Қоңыр',   hex:'#6F4A2E', dark:false},
+  7:{name:'Қара',    hex:'#1E1E20', dark:false},
+  0:{name:'Сұр',     hex:'#8C8C8C', dark:false},
+};
+
+// Түстердің құрылымдық мағынасы (анықтама бөлімі)
+const CORE = {
+  1:'Тыныштық, жақындық, сенім. Эмоционалды тереңдік пен қауіпсіздікке деген қажеттілік.',
+  2:'Ерік-жігер, табандылық, өзін-өзі бекіту. Өзін-өзі бағалау мен мойындалуға ұмтылыс.',
+  3:'Қуат, белсенділік, құштарлық. Әрекет пен өмірлік күштің қарқыны.',
+  4:'Үміт, ашықтық, оптимизм. Болашаққа ұмтылыс пен өзгеріске дайындық.',
+  5:'Сезімталдық, интуиция, қиял. Бірігу мен ерекшелікке ұмтылыс.',
+  6:'Дене жайлылығы, тұрақтылық. Қауіпсіздік пен сезімдік жайлылыққа қажеттілік.',
+  7:'Бас тарту, наразылық, қарсылық. «Жоқ» деудің және шектен шығудың түсі.',
+  0:'Бейтараптық, араласпау. Қорғаныш ретінде шеттету мен жасырыну.',
+};
+
+// Функционалдық топтардың сипаты
+const FUNC = {
+  plus: {title:'Мақсат-ұмтылыс', q:'«Мен неге жетуді қалаймын?»'},
+  cross:{title:'Қазіргі күй',     q:'«Мен қазір қалай әрекет етемін?»'},
+  equal:{title:'Резерв',          q:'«Қазір орынсыз деп қойған қасиеттерім»'},
+  minus:{title:'Қабылдамау',      q:'«Мен басып, аулақ ұстайтын нәрсе»'},
+};
+
+// Түс × функция мәтіндері (гибрид: Люшер логикасы, өз сөзімізбен)
+const INTERPRET = {
+  plus:{
+    1:'Тыныштық пен үйлесімге ұмтыласыз. Сізге жылы, сенімді қарым-қатынас және ішкі тыныштық қажет.',
+    2:'Өзіңізді бекітіп, құрметке ие болғыңыз келеді. Өз бетіңізше шешім қабылдап, ұстанымыңызды қорғауға ұмтыласыз.',
+    3:'Белсенділік пен әрекетке ұмтыласыз. Өмірден қарқын, табыс пен қызу эмоция күтесіз.',
+    4:'Жаңалық пен еркіндікке ұмтыласыз. Қазіргі жағдайдан шығатын жол мен жарқын болашаққа үміт іздейсіз.',
+    5:'Жақындық пен үйлесімді бірігуге ұмтыласыз. Өзіңізді ерекше әрі түсінікті сезіну маңызды.',
+    6:'Жайлылық пен қауіпсіздікке ұмтыласыз. Денеңіздің тынығуы мен қарапайым ләззатқа қажеттілік бар.',
+    7:'Бәрінен бас тартып, тәуелсіздікке ұмтыласыз. Қазіргі жағдайға қарсы тұрып, оны түбегейлі өзгерткіңіз келеді.',
+    0:'Шеттетіліп, тыныш қалуға ұмтыласыз. Шиеленістен қашып, жауапкершіліктен арашаланғыңыз келеді.',
+  },
+  cross:{
+    1:'Жақын адамға деген сезіммен өмір сүресіз, бірақ толық тыныштыққа әлі жете алмадыңыз.',
+    2:'Өз ұстанымыңызды сақтап, басқалардың ықпалына берілмейсіз. Жағдайды бақылауда ұстауға тырысасыз.',
+    3:'Белсенді әрекет етіп жүрсіз, бірақ бұл қуат сізді шаршатып та жіберуі мүмкін.',
+    4:'Айналаңызды зейінмен бақылап, өз пікіріңізді қалыптастырасыз. Жағдайды жақсартқыңыз келеді.',
+    5:'Әсерленгіш күйдесіз, айналаны нәзік сезінесіз және түсіністік іздейсіз.',
+    6:'Қазір жайлылық пен тұрақтылыққа сүйеніп отырсыз, артық шиеленістен аулақсыз.',
+    7:'Қарсылық танытып, көп нәрсеге «жоқ» деп жауап беріп жүрсіз.',
+    0:'Араласпай, шеттен бақылап жүрсіз — әзірге міндеттеме алудан тартынасыз.',
+  },
+  equal:{
+    1:'Жақындық пен тыныштыққа деген қажеттілікті уақытша бір жаққа қойдыңыз.',
+    2:'Өзін-өзі бекіту мен табандылықты қазір орынсыз деп санап, тежеп тұрсыз.',
+    3:'Белсенділік пен құштарлықты ұстап тұрсыз — бұл күш әзірге пайдаланылмай қалды.',
+    4:'Үміт пен ашықтықты сақтықпен тежеп, болашаққа абайлап қарайсыз.',
+    5:'Сезімталдық пен қиялды қазір артық деп санап, шетке ысырдыңыз.',
+    6:'Дене жайлылығына деген қажеттілікті уақытша маңызды емес деп қойдыңыз.',
+    7:'Қарсылық пен бас тартуды тежеп, ашық қақтығыстан аулақ жүрсіз.',
+    0:'Шеттету мен бейтараптықты қазір орынсыз санап, оған жол бермейсіз.',
+  },
+  minus:{
+    1:'Жақындық пен тыныштықтан айырылдым деген сезім мазалайды. Сенімді қарым-қатынас жетіспейді.',
+    2:'Өзіңізді бекіте алмай, ықпалыңыз шектелгендей сезінесіз — бұл ішкі қарсылық тудырады.',
+    3:'Белсенділігіңіз тежелген. Шаршадыңыз әрі күшіңізді толық жұмсай алмай жүрсіз.',
+    4:'Үміт пен жаңалықтан көңіліңіз қалды. Болашақтан жаңа күйзеліс күтіп, өзіңізді қорғайсыз.',
+    5:'Сезімдік жақындық пен түсіністіктің жетіспеуі жабырқатады.',
+    6:'Дене жайлылығы мен қауіпсіздіктің жоқтығы ыңғайсыздық тудырады.',
+    7:'Қарсылық пен наразылықты басып, жағдаймен амалсыз келісіп жүрсіз.',
+    0:'Шеттетуге жол бермей, белсенді араласуға мәжбүрсіз — бұл шаршатады.',
+  },
+};
+
+// Мінез-құлық типтері (Люшер: 4 хроматикалық тип) — өз сөзімізбен
+// Тип жетекші НЕГІЗГІ түспен анықталады; рөл-идол (+) мен рөл-қорғаныс (−) — бір типтің екі жағы.
+const TYPES4 = {
+  1:{name:'Көк тип', element:'Су', feeling:'Қанағаттанған, тыныш', behavior:'Сабырлы',
+     goal:'Қанағат пен тыныштық, сүйіспеншілікке толы жақындық және үйлесімді бірлік.',
+     idol:'Жылы, сенімді байланыс пен ішкі үйлесімге ұмтыласыз; тыныштыққа толы бірлікті іздейсіз.',
+     defense:'Бос кеңістіктен, бастан кешетін нәрсенің жоқтығынан қорқу. Қанағаттанбау ішкі мазасыздыққа, шыдамсыздыққа және салқындыққа айналуы мүмкін.'},
+  2:{name:'Жасыл тип', element:'Жер', feeling:'Салмақты, байыпты, маңызды', behavior:'Табанды',
+     goal:'Сенімділік пен өзін бекіту — тұлға ретінде маңызды болу және санасуды талап ету.',
+     idol:'Өз ұстанымыңызды сақтап, дербестік пен мойындалуға ұмтыласыз; маңыздылығыңызды бекіткіңіз келеді.',
+     defense:'Беделінен, бақылаудан айырылудан қорқу. Қысым кезінде қыңырлыққа, қаталдыққа немесе оқшаулануға бой алдыруы мүмкін.'},
+  3:{name:'Қызыл тип', element:'От', feeling:'Жанданған, әрекетшіл, шабытты', behavior:'Белсенді',
+     goal:'Жеңу мен табысқа жету — не істей алатынын сезіну, өмірден қарқын алу.',
+     idol:'Кез келген сын-қатерді қабылдайсыз; күшпен әрі табысты әрекет еткіңіз келеді.',
+     defense:'Талаптар шамадан тыс деп сезінгенде ашуланасыз; әлсіздік пен дәрменсіздіктен қорқасыз, қажу мен тітіркенуге ұшырауыңыз мүмкін.'},
+  4:{name:'Сары тип', element:'Ауа', feeling:'Көңілді, қуанышты', behavior:'Ашық, жайдары',
+     goal:'Уайымсыз еркіндік — шектеулерден, кедергілерден босататын жаңа мүмкіндіктер.',
+     idol:'Жаңа нәрседен жақсы мүмкіндіктер күтесіз; еркіндік пен өзгеріске ұмтыласыз.',
+     defense:'Жабылып қалудан, мүмкіндіктердің жоғалуынан қорқу. Көңілсіздік пен дамылсыз жаңалық іздеуге айналуы мүмкін.'},
+};
+function dominantType(rank){ return rank.find(c=>c>=1 && c<=4); } // алғашқы негізгі түс
+
+
+const SHORT = {
+  1:'тыныштық пен жақындыққа',2:'өзін бекітуге',3:'белсенділік пен әрекетке',4:'жаңалық пен еркіндікке',
+  5:'жақындық пен үйлесімге',6:'жайлылық пен қауіпсіздікке',7:'тәуелсіздік пен бас тартуға',0:'тыныштық пен шеттетуге',
+};
+const SHORT_LACK = {
+  1:'тыныштық',2:'өз бетіңше әрекет ету мүмкіндігі',3:'белсенді әрекетке деген күш',4:'болашаққа үміт',
+  5:'сезімдік жақындық',6:'дене жайлылығы',7:'еркіндік',0:'тыныштық',
+};
+
+// ----- Ахроматты (сұр) деректер -----
+const GREYS = {
+  ak: {name:'Ақ',        hex:'#FBFAF6'},
+  ash:{name:'Ашық сұр',  hex:'#C8C3B8'},
+  sur:{name:'Сұр',       hex:'#938E83'},
+  qoy:{name:'Қою сұр',   hex:'#56524B'},
+  qar:{name:'Қара',      hex:'#26241F'},
+};
+const GREY_ORDER = ['ak','ash','sur','qoy','qar'];
+const GREY_MOOD = { ak:'Тыныс іздеу', ash:'Жеңіл қашықтық', sur:'Бейтараптық', qoy:'Бәсеңдеу', qar:'Бас тарту' };
+const GREY_FIRST = {
+  ak:'Сізге қазір ашықтық пен тазалық қажет — артық жүктен арылып, еркін тыныс алғыңыз келеді.',
+  ash:'Сіз тыныш қашықтық пен жеңіл оқшаулануды қалайсыз — әзірге шектен тыс араласпай.',
+  sur:'Сіз бейтарап қалғыңыз келеді — ешбір тарапқа қосылмай, өзіңізді сырттан бақылап.',
+  qoy:'Сіздің қуатыңыз бәсеңдеген — қазір баяулап, ішке тартылғыңыз келеді.',
+  qar:'Сіз қазіргі жағдайдан бас тартқыңыз келеді — бәрін жауып тастап, тыныш қалуға деген қажеттілік күшті.',
+};
+const GREY_LAST = {
+  ak:'ашықтық пен көзге түсуден аулақсыз',
+  ash:'жеңіл оқшауланудан қашасыз',
+  sur:'бейтараптықты қаламайсыз — бір нәрсеге араласқыңыз келеді',
+  qoy:'әрекетсіздік пен бәсеңдеуге қарсысыз',
+  qar:'бас тартуды қаламайсыз — әлі күресіп жатырсыз, берілгіңіз келмейді',
+};
+
+// ----- Жұп мәндері (Люшер: 28 негізгі тема, белгі арқылы модификацияланады) -----
+// Кілт = екі түс кодын өсу ретімен біріктіру (мыс. көк+қара -> '17')
+const PAIRS = {
+  '01':{name:'Тыныштық үзілісі', desc:'Қоршау (сұр) мен тыныштық (көк) бірігіп, қозудан ада ұзақ үзіліске айналады.'},
+  '02':{name:'Қашықтан өзін бекіту', desc:'Сұр әлеуметтік қашықтық пен ұстамдылықты білдіреді, жасыл бұл ұстамдылықтың өзін бекіту үшін таңдалғанын көрсетеді.'},
+  '03':{name:'Импульсивтілік', desc:'Сұрдың қозғалыссыз белгісіздігі қызылдың қозу жарылысымен кенет бұзылуы мүмкін, не болмаса сұр импульсивті қызылды ұзақ тежеп тұрады.'},
+  '04':{name:'Бағытсыздық', desc:'Сұрдың белгісіздігіне жөн-жосықсыз, бағытсыз сары қозу қосылады.'},
+  '05':{name:'Сақ сезімталдық', desc:'Сақтық (сұр) эмоционалдылықпен (күлгін) ұштасады — нәзік, бірақ қорғанысты сезімталдық.'},
+  '06':{name:'Салғырттық', desc:'Сұрдың белгісіздігі қоңырдың дене бәсеңдігімен бірігіп, интеллектуалды кернеуден дене демалысына шегінуді көрсетеді.'},
+  '07':{name:'Оқшаулайтын қашықтық', desc:'Қашықтататын сұр шартсыз бас тартатын қарамен күшейіп, өткізбейтін қабырғаға айналады.'},
+  '12':{name:'Сақ бақылау', desc:'Тыныштық (көк) кернеулі өзін бекітумен (жасыл) сақталады — өзін ұстап, бақылауда болу.'},
+  '13':{name:'Жүректі белсенділік', desc:'Жайлы тыныштық (көк) белсенділікпен (қызыл) толығып, үйлесім тудырады.'},
+  '14':{name:'Үмітті тыныштық', desc:'Тыныштық пен қанағат (көк) болашаққа ашықтықпен (сары) ұштасады.'},
+  '15':{name:'Нәзік үндестік', desc:'Тыныштық пен жақындық (көк) сезімталдық пен қиялмен (күлгін) бірігіп, терең эмоционалды үндестік береді.'},
+  '16':{name:'Дене тыныштығы', desc:'Жан тыныштығы (көк) дене жайлылығымен (қоңыр) ұштасады — жайлы, қауіпсіз демалыс.'},
+  '17':{name:'Түбегейлі тыныштық', desc:'Тыныштыққа деген қажеттілік (көк) абсолютті, шартсыз сипат алады (қара) — «бәрі тынышталсын» деген күй.'},
+  '23':{name:'Мақсатты ерік', desc:'Өзін бекіту (жасыл) белсенділікпен (қызыл) бірігіп, табандылық пен жетекшілікке айналады.'},
+  '24':{name:'Талапшыл өзгеріс', desc:'Өзін бекіту (жасыл) жаңалыққа ұмтылумен (сары) ұштасады — мойындалу арқылы алға жылжу.'},
+  '25':{name:'Мақтанышты ерекшелік', desc:'Өзін бекіту (жасыл) ерекшелікке ұмтылумен (күлгін) бірігеді — өзін ерекше әрі маңызды сезіну.'},
+  '26':{name:'Тұрақты бекіну', desc:'Өзін бекіту (жасыл) қауіпсіздікке (қоңыр) сүйенеді — берік негізде ұстаным сақтау.'},
+  '27':{name:'Қатал ұстаным', desc:'Өзін бекіту (жасыл) шартсыз бас тартумен (қара) күшейеді — қыңыр, мойынсынбайтын беріктік.'},
+  '34':{name:'Ынталы кеңею', desc:'Белсенділік (қызыл) оптимизммен (сары) бірігіп, шабытты, кеңейетін қозғалысқа айналады.'},
+  '35':{name:'Құмарлықты үндесу', desc:'Белсенділік (қызыл) сезімталдықпен (күлгін) ұштасады — қызу, эмоционалды жақындық.'},
+  '36':{name:'Сезімдік ләззат', desc:'Белсенділік (қызыл) дене жайлылығымен (қоңыр) бірігіп, сезімдік қанағатқа бағытталады.'},
+  '37':{name:'Күшпен талап ету', desc:'Белсенділік (қызыл) шартсыз бас тартумен (қара) бірігеді — айырылуды күшпен өтейтін қатаң талап.'},
+  '45':{name:'Қиялды үміт', desc:'Жаңалыққа ұмтылыс (сары) қиялмен (күлгін) ұштасады — арманшыл, романтикалық күту.'},
+  '46':{name:'Жайлы бостандық', desc:'Жаңалыққа ашықтық (сары) дене жайлылығымен (қоңыр) бірігеді — қауіпсіз жағдайдан мүмкіндік іздеу.'},
+  '47':{name:'Үзілді-кесілді шешім', desc:'Жаңалыққа ұмтылыс (сары) шартсыздықпен (қара) бірігіп, кенет, түбегейлі шешімге айналады («бәрін тастап, жаңадан»).'},
+  '56':{name:'Нәзік жайлылық', desc:'Сезімталдық (күлгін) дене жайлылығымен (қоңыр) ұштасады — эмоционалды әрі дене жайлылығын аңсау.'},
+  '57':{name:'Қорғанысты ерекшелік', desc:'Сезімталдық (күлгін) бас тартумен (қара) бірігеді — әсерленгіштікті қорғаныш арқылы жасыру.'},
+  '67':{name:'Дене шегінуі', desc:'Дене жайлылығына ұмтылыс (қоңыр) шартсыз бас тартумен (қара) бірігіп, толық тыныштық пен шегінуге айналады.'},
+};
+// Белгінің мағынасы (жұп мәнін модификациялайды)
+const FUNC_MOD = {
+  plus: 'Бұл — сіз қалайтын немесе болғыңыз келетін нәрсе: мақсатыңыз бен ұмтылысыңыз.',
+  cross:'Дәл қазір сіз осы күйдесіз және осылай әрекет етесіз.',
+  equal:'Бұл қазір орынсыз деп саналып, жасырын күйде тежеліп тұр — резервте.',
+  minus:'Бұл басылған немесе қабылданбайды: қазіргі жағдайда оны жүзеге асыру тиімсіз деп сезінесіз.',
+};
+function pairKey(a,b){ return [a,b].sort((x,y)=>x-y).join(''); }
+function getPair(a,b){ return PAIRS[pairKey(a,b)] || {name:'—', desc:''}; }
+
+// Мазасыздық белдеулері
+function anxBand(a){
+  if(a<=2) return {label:'Өте төмен',color:'#157A68',bg:'#E3F0EC',
+    text:'Эмоционалды тұрақтылық. Қазір айтарлықтай ішкі шиеленіс байқалмайды.'};
+  if(a<=6) return {label:'Орташа',color:'#8A6D00',bg:'#FBF1D6',
+    text:'Белгілі бір шиеленіс бар, бірақ басқарылатын деңгейде. Бұл шаршаған кезең, дағдарыс емес.'};
+  if(a<=9) return {label:'Жоғары',color:'#B5743F',bg:'#F6E6D8',
+    text:'Эмоционалды кернеу байқалады. Демалу мен қалпына келуге назар аудару қажет.'};
+  return {label:'Өте жоғары',color:'#C9362C',bg:'#F8E0DC',
+    text:'Күшті ішкі шиеленіс. Маманмен сөйлесу пайдалы болуы мүмкін.'};
+}
+
+/* =================================================================
+   3) ҚОЗҒАЛТҚЫШ
+   ================================================================= */
+// Кітап (Драгунский): компенсация белгілері тек сұр/қара/қоңыр үшін
+// қойылады — фиолетов пен негізгі түстер үшін емес.
+const AUX = new Set([0,6,7]);
+const BASIC = new Set([1,2,3,4]);
+
+// Мазасыздық: алдыңғы 1-3 орындағы қосалқы түстер + соңғы 6-8 орындағы негізгі түстер
+function computeAnxiety(row){
+  let a=0;
+  for(let i=0;i<3;i++){ if(AUX.has(row[i]))   a += (3-i); } // 1→3, 2→2, 3→1
+  for(let i=5;i<8;i++){ if(BASIC.has(row[i])) a += (i-4); } // 6→1, 7→2, 8→3
+  return a; // 0..12
+}
+
+// Функционалдық топтар: (1,2)+ (3,4)× (5,6)= (7,8)−
+function functionalGroups(row){
+  return {
+    plus:[row[0],row[1]], cross:[row[2],row[3]],
+    equal:[row[4],row[5]], minus:[row[6],row[7]],
+  };
+}
+
+/* =================================================================
+   Тарих (localStorage) — жергілікті файлда жұмыс істейді,
+   чат алдын ала қарауында болмауы мүмкін (graceful fallback).
+   ================================================================= */
+const STORE_KEY='luscher_history_v1';
+function storageOK(){
+  try{ const t='__lt'; localStorage.setItem(t,'1'); localStorage.removeItem(t); return true; }
+  catch(e){ return false; }
+}
+function loadHistory(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'[]'); }catch(e){ return []; }
+}
+function saveEntry(entry){
+  try{
+    const h=loadHistory(); h.push(entry);
+    while(h.length>50) h.shift();
+    localStorage.setItem(STORE_KEY, JSON.stringify(h));
+    return true;
+  }catch(e){ return false; }
+}
+function clearHistory(){ try{ localStorage.removeItem(STORE_KEY); return true; }catch(e){ return false; } }
+function fmtDate(ts){
+  const d=new Date(ts), p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+
+/* =================================================================
+   4) UI ЛОГИКАСЫ
+   ================================================================= */
+const ORDER = [1,2,3,4,5,6,7,0]; // карталардың тұрақты реті
+let pass = 1;
+let choice1 = [];
+let choice2 = [];
+let greyChoice = [];
+let pairs = [];
+let pairIdx = 0;
+let wins = {};
+let prevScreen = 'intro';
+
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// кіріспе нүктелері + тарих батырмасын тексеру
+(function(){
+  const d=document.getElementById('introDots');
+  ORDER.forEach((c,i)=>{
+    const s=document.createElement('span');
+    s.style.background=COLORS[c].hex;
+    s.style.animationDelay=(i*0.06)+'s';
+    d.appendChild(s);
+  });
+  if(storageOK() && loadHistory().length){
+    document.getElementById('introHistoryBtn').style.display='inline-flex';
+  }
+})();
+
+function startFlow(){
+  greyChoice=[]; choice1=[]; choice2=[]; pairs=[]; pairIdx=0; wins={};
+  startAchromatic();
+}
+
+/* ---------- 1-бөлім: ахроматты ---------- */
+function startAchromatic(){
+  greyChoice=[];
+  renderGreys(); renderGreyPicked();
+  show('achromatic');
+}
+function renderGreys(){
+  const box=document.getElementById('greyCards');
+  box.innerHTML='';
+  GREY_ORDER.forEach((k,i)=>{
+    const el=document.createElement('div');
+    el.className='card';
+    el.dataset.grey=k;
+    el.style.background=GREYS[k].hex;
+    el.style.animationDelay=(i*0.05)+'s';
+    el.onclick=()=>pickGrey(k,el);
+    box.appendChild(el);
+  });
+}
+function pickGrey(k,el){
+  if(el.classList.contains('emptied')) return;
+  el.onclick=null;
+  el.classList.add('emptied','pulse');
+  setTimeout(()=>el.classList.remove('pulse'),220);
+  greyChoice.push(k);
+  renderGreyPicked();
+  if(greyChoice.length===5){ setTimeout(()=>startColors(),300); }
+}
+function undoGrey(){
+  if(greyChoice.length===0) return;
+  const last=greyChoice.pop();
+  const el=document.querySelector('#greyCards .card[data-grey="'+last+'"]');
+  if(el){ el.classList.remove('emptied'); el.onclick=()=>pickGrey(last,el); }
+  renderGreyPicked();
+}
+function renderGreyPicked(){
+  const box=document.getElementById('greyPicked');
+  document.getElementById('greyCounter').textContent='Таңдалды: '+greyChoice.length+' / 5';
+  document.getElementById('greyUndoBtn').style.display=greyChoice.length>0?'inline-flex':'none';
+  if(greyChoice.length===0){ box.innerHTML='<span class="picked-empty">әзірге бос…</span>'; return; }
+  box.innerHTML='';
+  greyChoice.forEach((k,i)=>{
+    const chip=document.createElement('div');
+    chip.className='chip';
+    chip.style.background=GREYS[k].hex;
+    chip.innerHTML='<span>'+(i+1)+'</span>';
+    box.appendChild(chip);
+  });
+}
+
+/* ---------- 2-бөлім: сегіз түс ---------- */
+function startColors(){
+  pass=1; choice1=[]; choice2=[];
+  document.getElementById('passTag').textContent='2-бөлім · 1-таңдау';
+  document.getElementById('instr').textContent='Ең жағымды түстен бастаңыз';
+  document.getElementById('subinstr').textContent='Дәл қазір көзіңізге қандай түс жағымды көрінеді?';
+  renderCards(); renderPicked();
+  show('test');
+}
+
+function startSecondPass(){
+  pass=2;
+  document.getElementById('passTag').textContent='2-бөлім · 2-таңдау';
+  document.getElementById('instr').textContent='Қайтадан — ең жағымды түстен';
+  document.getElementById('subinstr').textContent='Бірінші ретті ұмытыңыз. Жаңадан, таза таңдаңыз.';
+  renderCards(); renderPicked();
+  show('test');
+}
+
+function renderCards(){
+  const box=document.getElementById('cards');
+  box.innerHTML='';
+  ORDER.forEach((c,i)=>{
+    const el=document.createElement('div');
+    el.className='card';
+    el.dataset.color=c;
+    el.style.background=COLORS[c].hex;
+    el.style.animationDelay=(i*0.05)+'s';
+    el.onclick=()=>pickCard(c,el);
+    box.appendChild(el);
+  });
+}
+
+function currentChoice(){ return pass===1 ? choice1 : choice2; }
+
+function pickCard(c,el){
+  if(el.classList.contains('emptied')) return;
+  el.onclick=null;
+  el.classList.add('emptied','pulse');
+  setTimeout(()=>el.classList.remove('pulse'),220);
+  currentChoice().push(c);
+  renderPicked();
+  if(currentChoice().length===8){ finishPass(); }
+}
+
+function undoPick(){
+  const ch=currentChoice();
+  if(ch.length===0) return;
+  const last=ch.pop();
+  const el=document.querySelector('#cards .card[data-color="'+last+'"]');
+  if(el){
+    el.classList.remove('emptied');
+    el.onclick=()=>pickCard(last,el);
+  }
+  renderPicked();
+}
+
+function renderPicked(){
+  const box=document.getElementById('picked');
+  const ch=currentChoice();
+  document.getElementById('counter').textContent='Таңдалды: '+ch.length+' / 8';
+  document.getElementById('undoBtn').style.display = ch.length>0 ? 'inline-flex' : 'none';
+  if(ch.length===0){ box.innerHTML='<span class="picked-empty">әзірге бос…</span>'; return; }
+  box.innerHTML='';
+  ch.forEach((c,i)=>{
+    const chip=document.createElement('div');
+    chip.className='chip';
+    chip.style.background=COLORS[c].hex;
+    chip.innerHTML='<span>'+(i+1)+'</span>';
+    box.appendChild(chip);
+  });
+}
+
+function finishPass(){
+  setTimeout(()=>{
+    if(pass===1){ show('between'); }
+    else { startPairwise(); }
+  },300);
+}
+
+/* ---------- 3-бөлім: жұптап салыстыру (round-robin) ---------- */
+function startPairwise(){
+  pairs=[]; pairIdx=0; wins={};
+  ORDER.forEach(c=>wins[c]=0);
+  for(let i=0;i<ORDER.length;i++)
+    for(let j=i+1;j<ORDER.length;j++)
+      pairs.push([ORDER[i],ORDER[j]]);
+  // жұптарды араластыру
+  for(let i=pairs.length-1;i>0;i--){ const k=Math.floor(Math.random()*(i+1)); [pairs[i],pairs[k]]=[pairs[k],pairs[i]]; }
+  // әр жұп ішіндегі сол/оң ретін кездейсоқтау
+  pairs=pairs.map(p=>Math.random()<0.5?p:[p[1],p[0]]);
+  renderPair();
+  show('pairwise');
+}
+function renderPair(){
+  const total=pairs.length;
+  document.getElementById('pwCounter').textContent=(pairIdx+1)+' / '+total;
+  document.getElementById('pwBar').style.width=(pairIdx/total*100)+'%';
+  const box=document.getElementById('pwPair');
+  box.innerHTML='';
+  pairs[pairIdx].forEach(c=>{
+    const el=document.createElement('div');
+    el.className='pw-card';
+    el.style.background=COLORS[c].hex;
+    el.onclick=()=>pickPair(c,el);
+    box.appendChild(el);
+  });
+}
+function pickPair(c,el){
+  el.classList.add('flash');
+  el.onclick=null;
+  wins[c]=(wins[c]||0)+1;
+  setTimeout(()=>{
+    pairIdx++;
+    if(pairIdx>=pairs.length){
+      document.getElementById('pwBar').style.width='100%';
+      const saved=saveEntry(makeEntry());
+      renderResults();
+      showSaveNote(saved);
+      show('results');
+    } else { renderPair(); }
+  },180);
+}
+function pairwiseRank(){
+  return [...ORDER].sort((a,b)=>{
+    if((wins[b]||0)!==(wins[a]||0)) return (wins[b]||0)-(wins[a]||0);
+    return choice2.indexOf(a)-choice2.indexOf(b); // тең болса 2-таңдау ретімен
+  });
+}
+function makeEntry(){
+  const rank=pairwiseRank();
+  return { date:Date.now(), grey:greyChoice.slice(), c1:choice1.slice(), c2:choice2.slice(),
+           wins:Object.assign({},wins), anx:computeAnxiety(choice2), type:dominantType(rank) };
+}
+function showSaveNote(saved){
+  const el=document.getElementById('saveNote');
+  if(saved){ el.className='save-note ok'; el.textContent='✓ Нәтиже тарихқа сақталды.'; }
+  else { el.className='save-note'; el.textContent='Тарих жергілікті файлда ғана сақталады (бұл алдын ала қарауда емес).'; }
+}
+
+/* =================================================================
+   Қосымша индекстер (8 түс ретінен есептеледі)
+   ================================================================= */
+// Жұмыс тобы: жасыл+қызыл+сары
+function workGroup(){
+  const pos=c=>choice2.indexOf(c);
+  const avg=(pos(2)+pos(3)+pos(4))/3;
+  const inBack=[2,3,4].filter(c=>pos(c)>=5).length;
+  const shiftG=choice2.indexOf(2)-choice1.indexOf(2);
+  const shiftR=choice2.indexOf(3)-choice1.indexOf(3);
+  let level,color,text;
+  if(avg<=2.5 && inBack===0){ level='Жоғары'; color='#157A68';
+    text='Жасыл, қызыл, сары шоғырланып, қатардың басында тұр — ұзақ әрі қиын жұмысты табысты аяқтауға қабілет жоғары.'; }
+  else if(avg<=4.2 && inBack<=1){ level='Орташа'; color='#8A6D00';
+    text='Жұмыс тобы біршама шашыраңқы — өнімділік орташа, ұзақ жүктемеде шаршау мүмкін.'; }
+  else { level='Төмен'; color='#B5743F';
+    text='Жұмыс тобы шашыраған немесе қатардың соңында — қазіргі жұмысқа қатысты болжам онша қолайлы емес.'; }
+  if(shiftG>=2) text+=' Жасыл артқа жылжыған: ерік-жігердің әлсіреуі, мақсаттың жоғалуы мүмкін.';
+  if(shiftR>=2) text+=' Қызыл артқа жылжыған: дене қуатының сарқылуы мүмкін.';
+  return {level,color,text};
+}
+// Вегетативті баланс: жарық (қызыл,сары) vs күңгірт (көк,қара)
+function vegetative(){
+  const pos=c=>choice2.indexOf(c);
+  const light=(pos(3)+pos(4))/2, dark=(pos(1)+pos(7))/2;
+  if(Math.abs(light-dark)<3) return {state:'Тұрақты',color:'#157A68',
+    text:'Жарық және күңгірт түстер ретте араласқан — вегетативті өзін-өзі реттеу тұрақты көрінеді.'};
+  if(light<dark) return {state:'Жеңіл толқу',color:'#8A6D00',
+    text:'Жарық түстер (қызыл, сары) алда, күңгірт түстер (көк, қара) артта — қозуға бейім, бірақ салдары ауыр болмауы мүмкін.'};
+  return {state:'Ұзаққа созылған толқу',color:'#B5743F',
+    text:'Күңгірт түстер алда, жарық түстер артта — саморегуляцияның ұзаққа созылған тұрақсыздығын білдіруі мүмкін.'};
+}
+// Амбиваленттік: 1-таңдауда алда (1-2), 2-таңдауда артта (7-8) — не керісінше
+function ambivalence(){
+  const res=[];
+  ORDER.forEach(c=>{
+    const a=choice1.indexOf(c), b=choice2.indexOf(c);
+    if((a<=1&&b>=6)||(a>=6&&b<=1)) res.push(c);
+  });
+  return res;
+}
+// 1-ші vs 2-ші таңдау
+function choiceComparison(){
+  const same=choice1.join()===choice2.join();
+  const a1=computeAnxiety(choice1), a2=computeAnxiety(choice2);
+  let prog;
+  if(a2<a1) prog='қолайлы — 2-таңдауда кернеу азайды';
+  else if(a2>a1) prog='онша қолайлы емес — 2-таңдауда кернеу өсті';
+  else prog='бейтарап';
+  return {same,prog};
+}
+// Актуалды проблемалардың рейтингі (Драгунский: 18,17,28,27,16,26,38,37,36)
+function problemRanking(){
+  return ['18','17','28','27','16','26','38','37','36'].map(code=>{
+    const pi=+code[0]-1, ri=+code[1]-1;
+    return {a:choice2[pi], b:choice2[ri]};
+  });
+}
+
+function renderProblem(){
+  const c1=choice2[0], c8=choice2[7];
+  const pd=getPair(c1,c8);
+  let h='<h3>Қазіргі негізгі шиеленіс — «'+pd.name+'»</h3>'
+    +'<div class="group-top" style="margin-bottom:12px;"><div class="swatches">'+swatchHTML(c1)+swatchHTML(c8)+'</div></div>'
+    +'<p style="margin-bottom:10px;">Сіз <b>'+SHORT[c1]+'</b> ұмтыласыз, ал <b>'+SHORT_LACK[c8]
+    +'</b> қазір қолжетімсіз. Осы екеуінің қарама-қарсылығы — шиеленіс өзегі.</p>'
+    +'<p class="small" style="margin:0 0 4px;">'+pd.desc+'</p>';
+  const extra=problemRanking().slice(1,4);
+  if(extra.length){
+    h+='<div class="pl-label">Тағы назарда</div><div class="plist">';
+    extra.forEach(r=>{
+      const pp=getPair(r.a,r.b);
+      h+='<div class="pl-item"><div class="swatches">'+swatchHTML(r.a)+swatchHTML(r.b)+'</div><span>'+pp.name+'</span></div>';
+    });
+    h+='</div>';
+  }
+  document.getElementById('problemBox').innerHTML=h;
+}
+
+function idxCard(title,sub,val,color,text){
+  return '<div class="idx"><div class="idx-top"><span class="idx-title">'+title
+    +(sub?' <span class="idx-sub">'+sub+'</span>':'')+'</span>'
+    +'<span class="idx-val" style="color:'+color+'">'+val+'</span></div>'
+    +'<div class="idx-text">'+text+'</div></div>';
+}
+function renderIndices(){
+  const wg=workGroup(), vg=vegetative(), cc=choiceComparison(), amb=ambivalence();
+  let h='';
+  h+=idxCard('Жұмысқа қабілет','(жасыл+қызыл+сары)', wg.level, wg.color, wg.text);
+  h+=idxCard('Вегетативті баланс','(жарық/күңгірт)', vg.state, vg.color, vg.text);
+  h+=idxCard('Таңдаулардың тұрақтылығы','(1-ші vs 2-ші)', cc.same?'Ригидтік':'Икемділік', '#6F4A2E',
+    (cc.same?'1-ші және 2-ші таңдау бірдей — көзқарас бекем, эмоционалды ригид.':'Таңдаулар өзгерді — қабылдау икемді.')+' Болжам: '+cc.prog+'.');
+  if(amb.length){
+    h+=idxCard('Амбиваленттік','', amb.map(c=>COLORS[c].name).join(', '), '#823D86',
+      'Бұл түс(тер) бір таңдауда алда, екіншісінде артта тұр — оларға қатынас қарама-қайшы (бір мезгілде тартады әрі итереді).');
+  }
+  document.getElementById('idxBox').innerHTML=h;
+}
+
+/* ---------- нәтижені құрастыру ---------- */
+function colorStrip(elId, arr){
+  const el=document.getElementById(elId);
+  el.innerHTML='';
+  arr.forEach(c=>{
+    const d=document.createElement('div');
+    d.style.background=COLORS[c].hex;
+    el.appendChild(d);
+  });
+}
+
+function swatchHTML(c){
+  return '<div class="sw" style="background:'+COLORS[c].hex+'"></div>';
+}
+
+function greyStrip(elId, arr){
+  const el=document.getElementById(elId);
+  el.innerHTML='';
+  arr.forEach(k=>{
+    const d=document.createElement('div');
+    d.style.background=GREYS[k].hex;
+    el.appendChild(d);
+  });
+}
+
+function renderMood(){
+  const box=document.getElementById('moodBox');
+  if(greyChoice.length<5){ box.style.display='none'; return; }
+  box.style.display='block';
+  const first=greyChoice[0], last=greyChoice[4];
+  let m='<div class="mlabel">1-бөлім · Жалпы көңіл-күй</div>'
+    +'<h3>'+GREY_MOOD[first]+'</h3>'
+    +'<div class="mtext">'+GREY_FIRST[first]+' Сонымен қатар, '+GREY_LAST[last]+'.</div>'
+    +'<div class="mstrip">';
+  greyChoice.forEach(k=>{ m+='<div style="background:'+GREYS[k].hex+'"></div>'; });
+  m+='</div>';
+  box.innerHTML=m;
+}
+
+function renderType(rank){
+  const lead=rank[0], rej=rank[7];
+  const tc=dominantType(rank);          // жетекші негізгі түс = тип
+  const t=TYPES4[tc];
+  const compensated = lead!==tc;        // жетекші орында негізгі емес түс тұр ма
+  let h='<div class="tlabel">Мінез-құлық типі · '+t.element+' стихиясы</div>'
+    +'<div class="tname">'+t.name+'</div>'
+    +'<div class="tmeta3">'
+    +  '<div><span class="k3">Стихия</span><span class="v3">'+t.element+'</span></div>'
+    +  '<div><span class="k3">Өзін сезінуі</span><span class="v3">'+t.feeling+'</span></div>'
+    +  '<div><span class="k3">Мінез</span><span class="v3">'+t.behavior+'</span></div>'
+    +'</div>'
+    +'<div class="tbadges">'
+    +  '<span class="tbadge pp"><span class="d" style="background:'+COLORS[lead].hex+'"></span>++ '+COLORS[lead].name+' · ең қалаулы</span>'
+    +  '<span class="tbadge mm"><span class="d" style="background:'+COLORS[rej].hex+'"></span>−− '+COLORS[rej].name+' · ең қабылданбаған</span>'
+    +'</div>'
+    +'<p class="tgoal"><b>Мақсат.</b> '+t.goal+'</p>'
+    +'<div class="roles">'
+    +  '<div class="role idol"><div class="role-h">Рөл-идол<span>мақсатқа ұмтылғанда</span></div><p>'+t.idol+'</p></div>'
+    +  '<div class="role def"><div class="role-h">Рөл-қорғаныс<span>қысым не фрустрацияда</span></div><p>'+t.defense+'</p></div>'
+    +'</div>';
+  if(compensated){
+    h+='<div class="tnote">Жетекші орында негізгі емес түс — <b>'+COLORS[lead].name+'</b>. Бұл компенсация белгісі: негізгі ұмтылысыңыз <b>'+t.name+'</b>ке жатады, бірақ ол ауытқыған не компенсацияланған түрде көрінеді.</div>';
+  } else {
+    h+='<div class="tnote">Ең қабылданбаған түс — <b>'+COLORS[rej].name+'</b>: дәл осы рөл-қорғаныстың қай жағы белсенді екенін көрсетеді — сіз осы сападан немесе оның жоқтығынан қашасыз.</div>';
+  }
+  document.getElementById('typeBox').innerHTML=h;
+}
+
+function renderResults(){
+  const row = choice2;                 // функц. талдау 2-таңдауға негізделеді
+  greyStrip('stripGrey', greyChoice);
+  colorStrip('strip1', choice1);
+  colorStrip('strip2', choice2);
+
+  // 1-бөлім: жалпы көңіл-күй
+  renderMood();
+
+  // мінез-құлық типі (жұптап салыстыру рейтингі бойынша)
+  renderType(pairwiseRank());
+
+  // функционалдық топтар (жұп негізінде)
+  const g = functionalGroups(row);
+  const order = ['plus','cross','equal','minus'];
+  let html='';
+  order.forEach(key=>{
+    const pr=g[key];
+    const f=FUNC[key];
+    const pd=getPair(pr[0],pr[1]);
+    html+=''
+      +'<div class="group">'
+      +  '<div class="group-top">'
+      +    '<div class="swatches">'+swatchHTML(pr[0])+swatchHTML(pr[1])+'</div>'
+      +    '<div class="group-titles"><h3>'+f.title+' · '+pd.name+'</h3><div class="q">'+f.q+'</div></div>'
+      +  '</div>'
+      +  '<p class="pdesc">'+pd.desc+'</p>'
+      +  '<p class="pmod">'+FUNC_MOD[key]+'</p>'
+      +'</div>';
+  });
+  document.getElementById('groups').innerHTML=html;
+
+  // актуалды проблема (жұп + рейтинг)
+  renderProblem();
+
+  // қосымша индекстер
+  renderIndices();
+
+  // мазасыздық
+  const a=computeAnxiety(row);
+  const b=anxBand(a);
+  let scale='';
+  for(let i=1;i<=12;i++){
+    const on = i<=a;
+    scale+='<i style="background:'+(on?b.color:'var(--line)')+'"></i>';
+  }
+  document.getElementById('anxBox').innerHTML=''
+    +'<div class="anx-score"><span class="num" style="color:'+b.color+'">'+a+'</span>'
+    +  '<span class="den">/ 12</span>'
+    +  '<span class="band" style="background:'+b.bg+';color:'+b.color+'">'+b.label+'</span></div>'
+    +'<div class="scale">'+scale+'</div>'
+    +'<div class="scale-labels"><span>0 — тұрақты</span><span>6</span><span>12 — кернеулі</span></div>'
+    +'<div class="anx-text">'+b.text+'</div>';
+
+  // түстер анықтамасы
+  let ref='';
+  ORDER.forEach(c=>{
+    ref+='<div class="ref-item"><div class="rsw" style="background:'+COLORS[c].hex+'"></div>'
+      +'<div><span class="rname">'+COLORS[c].name+'.</span> <span class="rtext">'+CORE[c]+'</span></div></div>';
+  });
+  document.getElementById('refGrid').innerHTML=ref;
+}
+
+function currentScreenId(){ const a=document.querySelector('.screen.active'); return a?a.id:'intro'; }
+function showHistory(){ prevScreen=currentScreenId(); renderHistory(); show('history'); }
+function historyBack(){ show(prevScreen==='history'?'intro':prevScreen); }
+
+function renderTrend(hist){
+  if(!storageOK()) return '<p class="small">Тарих жергілікті файлда ғана жұмыс істейді — бұл чат алдын ала қарауында сақталмайды. Файлды компьютерге жүктеп ашсаңыз, нәтижелер осында жиналады.</p>';
+  if(hist.length<2) return '<p class="small">Динамиканы көру үшін кемінде екі рет өту керек. Қазір сақталған: '+hist.length+'.</p>';
+  const W=620,H=200,pl=36,pr=14,pt=16,pb=28;
+  const n=hist.length;
+  const x=i=> pl + (n===1?0:(i/(n-1))*(W-pl-pr));
+  const y=v=> pt + (1-v/12)*(H-pt-pb);
+  // тор сызықтары 0/3/6/9/12
+  let grid='';
+  [0,3,6,9,12].forEach(v=>{
+    grid+='<line x1="'+pl+'" y1="'+y(v)+'" x2="'+(W-pr)+'" y2="'+y(v)+'" stroke="var(--line-soft)" stroke-width="1"/>'
+      +'<text x="'+(pl-8)+'" y="'+(y(v)+4)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+v+'</text>';
+  });
+  let path='', dots='';
+  hist.forEach((e,i)=>{
+    const px=x(i), py=y(e.anx);
+    path+=(i?'L':'M')+px.toFixed(1)+' '+py.toFixed(1)+' ';
+    const col=anxBand(e.anx).color;
+    dots+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="5" fill="'+col+'" stroke="var(--surface)" stroke-width="2"/>';
+  });
+  const svg='<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Мазасыздық динамикасы">'
+    +grid
+    +'<path d="'+path+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    +dots
+    +'<text x="'+pl+'" y="'+(H-6)+'" font-size="11" fill="var(--muted)">'+fmtDate(hist[0].date).split(' ')[0]+'</text>'
+    +'<text x="'+(W-pr)+'" y="'+(H-6)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+fmtDate(hist[n-1].date).split(' ')[0]+'</text>'
+    +'</svg>';
+  return '<div class="trend-wrap"><div class="trend-title">Мазасыздық деңгейі · уақыт бойынша</div>'+svg+'</div>';
+}
+
+function renderHistory(){
+  document.getElementById('trendBox').innerHTML=renderTrend(loadHistory());
+  const list=document.getElementById('histList');
+  const hist=loadHistory();
+  if(!storageOK()){ list.innerHTML=''; return; }
+  if(!hist.length){ list.innerHTML='<p class="small">Тарих бос. Тест өткізіңіз — нәтиже осында сақталады.</p>'; return; }
+  let h='<div class="picked-label" style="margin-bottom:12px;">Өткен нәтижелер · кез келгенін ашуға болады</div>';
+  for(let i=hist.length-1;i>=0;i--){
+    const e=hist[i], band=anxBand(e.anx);
+    const tname=(TYPES4[e.type]&&TYPES4[e.type].name)||'—';
+    const strip=e.c2.map(c=>'<div style="background:'+COLORS[c].hex+'"></div>').join('');
+    h+='<div class="hist-item" onclick="viewEntry('+i+')">'
+      +'<div class="hist-main"><div class="hist-date">'+fmtDate(e.date)+'</div><div class="hist-type">'+tname+'</div></div>'
+      +'<div class="strip mini">'+strip+'</div>'
+      +'<div class="hist-anx" style="color:'+band.color+'">'+e.anx+'<span>/12</span></div>'
+      +'</div>';
+  }
+  list.innerHTML=h;
+}
+
+function viewEntry(i){
+  const e=loadHistory()[i];
+  if(!e) return;
+  greyChoice=e.grey.slice(); choice1=e.c1.slice(); choice2=e.c2.slice();
+  wins=Object.assign({}, e.wins||{});
+  prevScreen='history';
+  renderResults();
+  document.getElementById('saveNote').textContent='';
+  show('results');
+}
+
+function confirmClear(){
+  if(confirm('Барлық тарихты өшіру керек пе? Бұл әрекетті қайтару мүмкін емес.')){
+    clearHistory();
+    renderHistory();
+    document.getElementById('introHistoryBtn').style.display='none';
+  }
+}
+
+function restart(){ show('intro'); }
+</script>
+</body>
+</html>
